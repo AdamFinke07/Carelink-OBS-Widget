@@ -1,0 +1,10 @@
+{
+    "obs_credentials": {
+        "ip": "localhost",
+        "port": "4455",
+        "password": ""
+    },
+    "use_mmol": true,
+    "use_US_region": false,
+    "obs_source_name": "Glucose"
+}
