@@ -6,6 +6,7 @@ import FreeSimpleGUI as sg
 import CarelinkLogin
 import os
 import threading
+import pathlib
 
 
 def load_settings():
@@ -16,6 +17,12 @@ def save_settings(settings):
     with open('settings.json', 'w') as f:
         json.dump(settings, f, indent=4)
 
+def create_settings():
+    settings = {"obs_credentials": {"ip": "localhost", "port": "4455", "password": ""}, "use_mmol": True, "use_US_region": False, "obs_source_name": "Glucose"}
+    with open('settings.json', 'w+') as f:
+        json.dump(settings, f, indent=4)
+
+
 def connect_obs(): # connects to obs websocket and returns the obsClient object and available requests
     settings = load_settings()
     try:
@@ -25,7 +32,7 @@ def connect_obs(): # connects to obs websocket and returns the obsClient object 
             password=settings["obs_credentials"]["password"]
         )
     except Exception as e:
-        sg.popup(f'Cannot Connect To OBS Check Your Web Socket Settings.')
+        sg.popup(f'Cannot Connect To OBS Check Your Web Socket Settings. {e}')
         return None, []
 
     response = obsClient.get_version()
@@ -79,6 +86,11 @@ def update_obs(carelinkClient, obsClient, stop_event):
             break
 
 def main():
+    from pathlib import Path
+
+    f = Path("settings.json")
+    if not(f.is_file()):
+        create_settings()
     carelinkClient = connect_carelink()        
     
     loggedin = False

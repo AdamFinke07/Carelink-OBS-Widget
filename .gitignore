@@ -4,3 +4,4 @@ dist/
 build/
 venv/
 main.spec
+settings.json
