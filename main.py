@@ -68,7 +68,7 @@ def request_carelink_data(carelinkClient): # sends a request for recent data and
     else:
         return None, None, None
 
-def update_obs(carelinkClient, obsClient, stop_event):
+def update_obs(carelinkClient, obsClient, stop_event, force_sync_event, window):
     settings = load_settings()
     source = settings['obs_source_name']
     while not stop_event.is_set():
@@ -82,8 +82,14 @@ def update_obs(carelinkClient, obsClient, stop_event):
         except Exception as e:
             print(f"Error in update loop: {e}")
             wait_time = 20
-        if stop_event.wait(wait_time):
-            break
+        
+        for i in range(wait_time, 0, -1):
+            window['nextSync'].update(f"Next Sync: {i}s")
+            if force_sync_event.wait(1):
+                force_sync_event.clear()
+                break
+            if stop_event.is_set():
+                break
 
 
 
@@ -94,6 +100,7 @@ def main():
     loginButtonText = 'Login'
     loggedInText = 'Not Logged In'
     stop_event = threading.Event()
+    force_sync_event = threading.Event()
     update_thread = None
     settings = load_settings()
     
@@ -116,7 +123,7 @@ def main():
         [sg.Text('OBS Source Name: '), sg.Input(default_text=settings['obs_source_name'], key='obs_source_name')],
         [sg.Button('Save Web Socket Settings', key='saveSettings')],
         [sg.Text(loggedInText, key='loginStatus'), sg.Button(button_text=loginButtonText, key='loginButton', disabled=loggedin), sg.Button(button_text='Sign Out', key='signOutButton', disabled=not(loggedin))],
-        [sg.Button('Start Sync', key='startSync'), sg.Button('Stop Sync', key='stopSync', disabled=True)]
+        [sg.Button('Start Sync', key='startSync'), sg.Button('Stop Sync', key='stopSync', disabled=True), sg.Button('Force Sync', key='forceSync', disabled=True), sg.Text('Next Sync: N/A', key='nextSync')]
     ]
     
     window = sg.Window('Carelink OBS Widget', windowLayout)
@@ -126,6 +133,7 @@ def main():
         
         if event in (sg.WIN_CLOSED, 'Cancel'):
             stop_event.set()
+            force_sync_event.set()
             if update_thread and update_thread.is_alive():
                 update_thread.join()
             break
@@ -169,17 +177,25 @@ def main():
             obsClient, available_requests = connect_obs()
             if loggedin and obsClient != None:
                 stop_event.clear()
-                update_thread = threading.Thread(target=update_obs, args=(carelinkClient, obsClient, stop_event), daemon=True)
+                force_sync_event.clear()
+                update_thread = threading.Thread(target=update_obs, args=(carelinkClient, obsClient, stop_event, force_sync_event, window), daemon=True)
                 update_thread.start()
                 window['startSync'].update(disabled=True)
                 window['stopSync'].update(disabled=False)
+                window['forceSync'].update(disabled=False)
                 window['saveSettings'].update(disabled=True)
             
         if event == 'stopSync':
             stop_event.set()
+            force_sync_event.set()
             window['startSync'].update(disabled=False)
             window['stopSync'].update(disabled=True)
+            window['forceSync'].update(disabled=True)
             window['saveSettings'].update(disabled=False)
+            window['nextSync'].update('Next Sync: N/A')
+
+        if event == 'forceSync':
+            force_sync_event.set()
 
     window.close()
 
