@@ -1,2 +1,6 @@
 __pycache__/
 logindata.json
+dist/
+build/
+venv/
+main.spec
