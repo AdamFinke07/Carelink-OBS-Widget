@@ -22,7 +22,7 @@ def save_settings(settings):
         json.dump(settings, f, indent=4)
 
 def create_settings():
-    settings = {"obs_credentials": {"ip": "localhost", "port": "4455", "password": ""}, "use_mmol": True, "use_US_region": False, "obs_text_source_name": "Glucose", "obs_image_source_name": "Trend"}
+    settings = {"obs_credentials": {"ip": "localhost", "port": "4455", "password": ""}, "use_mmol": True, "use_US_region": False, "obs_text_source_name": "Glucose", "obs_image_source_name": "Trend", "wait_time": 300}
     with open('settings.json', 'w+') as f:
         json.dump(settings, f, indent=4)
 
@@ -80,7 +80,7 @@ def update_obs(carelinkClient, obsClient, stop_event, force_sync_event, window):
                 obsClient.set_input_settings(name=text_source, settings={"text": str(lastSG)}, overlay=True)
                 image_path = os.path.abspath(f'assets/{lastTrend.lower()}.png')
                 obsClient.set_input_settings(name=image_source, settings={"file": image_path}, overlay=True)
-                wait_time = 300
+                wait_time = settings['wait_time']
             else:
                 wait_time = 20
         except Exception as e:
@@ -117,15 +117,15 @@ def main():
             loggedin = True
             
     windowLayout = [
-        [sg.Text('General Settings:')],
-        [sg.Text('Use US Region:'), sg.Checkbox('', default=settings['use_US_region'], key='is_us_region', enable_events=True)],
-        [sg.Text('Use MMOL/L:'), sg.Checkbox('', default=settings['use_mmol'], key='is_mmol', enable_events=True)],
-        [sg.Text('Web Socket Settings:')],
+        [sg.Text('Settings:')],
+        [sg.Text('Use US Region:'), sg.Checkbox('', default=settings['use_US_region'], key='is_us_region')],
+        [sg.Text('Use MMOL/L:'), sg.Checkbox('', default=settings['use_mmol'], key='is_mmol')],
         [sg.Text('Web Socket IP: '), sg.Input(default_text=settings['obs_credentials']['ip'], key='obs_ip')],
         [sg.Text('Web Socket Port: '), sg.Input(default_text=settings['obs_credentials']['port'], key='obs_port')],
         [sg.Text('Web Socket Password: '), sg.Input(default_text=settings['obs_credentials']['password'], key='obs_password', password_char='*')],
         [sg.Text('OBS Text Source Name: '), sg.Input(default_text=settings['obs_text_source_name'], key='obs_text_source_name')],
         [sg.Text('OBS Image Source Name: '), sg.Input(default_text=settings['obs_image_source_name'], key='obs_image_source_name')],
+        [sg.Text('Wait Time Between Syncs: '), sg.Input(default_text=settings['wait_time'], key='wait_time')],
         [sg.Button('Save Web Socket Settings', key='saveSettings')],
         [sg.Text(loggedInText, key='loginStatus'), sg.Button(button_text=loginButtonText, key='loginButton', disabled=loggedin), sg.Button(button_text='Sign Out', key='signOutButton', disabled=not(loggedin))],
         [sg.Button('Start Sync', key='startSync'), sg.Button('Stop Sync', key='stopSync', disabled=True), sg.Button('Force Sync', key='forceSync', disabled=True), sg.Text('Next Sync: N/A', key='nextSync')]
@@ -153,20 +153,23 @@ def main():
                 window['signOutButton'].update(disabled=False)
                 window['loginStatus'].update(f'Logged In As : {carelinkData["patientData"]["firstName"]}')
         
-        if event == 'is_us_region':
-            settings['use_US_region'] = values['is_us_region']
-            save_settings(settings)
-        
-        if event == 'is_mmol':
-            settings['use_mmol'] = values['is_mmol']
-            save_settings(settings)
-        
         if event == 'saveSettings':
+            settings['use_US_region'] = values['is_us_region']
+            settings['use_mmol'] = values['is_mmol']
             settings['obs_credentials']['ip'] = values['obs_ip']
-            settings['obs_credentials']['port'] = values['obs_port']
             settings['obs_credentials']['password'] = values['obs_password']
             settings['obs_text_source_name'] = values['obs_text_source_name']
             settings['obs_image_source_name'] = values['obs_image_source_name']
+
+            try:
+                settings['obs_credentials']['port'] = int(values['obs_port'])
+            except Exception:
+                sg.popup('Web socket port must be an integer, value not saved')
+
+            try:
+                settings['wait_time'] = int(values['wait_time'])
+            except Exception:
+                sg.popup('Wait time must be an integer, value not saved')
             save_settings(settings)
             sg.popup('Settings Saved!')
         
