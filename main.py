@@ -22,7 +22,7 @@ def save_settings(settings):
         json.dump(settings, f, indent=4)
 
 def create_settings():
-    settings = {"obs_credentials": {"ip": "localhost", "port": "4455", "password": ""}, "use_mmol": True, "use_US_region": False, "obs_source_name": "Glucose"}
+    settings = {"obs_credentials": {"ip": "localhost", "port": "4455", "password": ""}, "use_mmol": True, "use_US_region": False, "obs_text_source_name": "Glucose", "obs_image_source_name": "Trend"}
     with open('settings.json', 'w+') as f:
         json.dump(settings, f, indent=4)
 
@@ -43,7 +43,7 @@ def connect_obs(): # connects to obs websocket and returns the obsClient object 
     print(f'Connected to OBS Version: {response.obs_version}')
     print(f'Web Socket Version: {response.obs_web_socket_version}')
     print(f'Platform: {response.platform_description}')
-    return obsClient, response.available_requests
+    return obsClient
 
 def login_carelink():
     settings = load_settings()
@@ -59,23 +59,27 @@ def request_carelink_data(carelinkClient): # sends a request for recent data and
     if carelinkClient.init():
         carelinkData = carelinkClient.getRecentData()
         if carelinkData is None:
-            return None, None, None
+            return None, None, None, None
         lastSG = carelinkData['patientData']['lastSG']['sg']
+        lastTrend = carelinkData['patientData']['lastSGTrend']
         if settings["use_mmol"] == 1:
             lastSG = round(lastSG / 18, 1)
         sgs = [(item['sg'], datetime.fromisoformat(item['timestamp'])) for item in carelinkData['patientData']['sgs']]
-        return carelinkData, lastSG, sgs
+        return carelinkData, lastSG, sgs, lastTrend
     else:
-        return None, None, None
+        return None, None, None, None
 
 def update_obs(carelinkClient, obsClient, stop_event, force_sync_event, window):
     settings = load_settings()
-    source = settings['obs_source_name']
+    text_source = settings['obs_text_source_name']
+    image_source = settings['obs_image_source_name']
     while not stop_event.is_set():
         try:
-            carelinkData, lastSG, sgs = request_carelink_data(carelinkClient)
+            carelinkData, lastSG, sgs, lastTrend = request_carelink_data(carelinkClient)
             if lastSG is not None and obsClient:
-                obsClient.set_input_settings(name=source, settings={"text": str(lastSG)}, overlay=True)
+                obsClient.set_input_settings(name=text_source, settings={"text": str(lastSG)}, overlay=True)
+                image_path = os.path.abspath(f'assets/{lastTrend.lower()}.png')
+                obsClient.set_input_settings(name=image_source, settings={"file": image_path}, overlay=True)
                 wait_time = 300
             else:
                 wait_time = 20
@@ -106,7 +110,7 @@ def main():
     
     
     if carelinkClient.init():
-        carelinkData, lastSG, sgs = request_carelink_data(carelinkClient)
+        carelinkData, lastSG, sgs, lastTrend = request_carelink_data(carelinkClient)
         if carelinkData:
             loginButtonText = 'Logged In'
             loggedInText = f'Logged In As: {carelinkData["patientData"]["firstName"]}'
@@ -120,13 +124,14 @@ def main():
         [sg.Text('Web Socket IP: '), sg.Input(default_text=settings['obs_credentials']['ip'], key='obs_ip')],
         [sg.Text('Web Socket Port: '), sg.Input(default_text=settings['obs_credentials']['port'], key='obs_port')],
         [sg.Text('Web Socket Password: '), sg.Input(default_text=settings['obs_credentials']['password'], key='obs_password', password_char='*')],
-        [sg.Text('OBS Source Name: '), sg.Input(default_text=settings['obs_source_name'], key='obs_source_name')],
+        [sg.Text('OBS Text Source Name: '), sg.Input(default_text=settings['obs_text_source_name'], key='obs_text_source_name')],
+        [sg.Text('OBS Image Source Name: '), sg.Input(default_text=settings['obs_image_source_name'], key='obs_image_source_name')],
         [sg.Button('Save Web Socket Settings', key='saveSettings')],
         [sg.Text(loggedInText, key='loginStatus'), sg.Button(button_text=loginButtonText, key='loginButton', disabled=loggedin), sg.Button(button_text='Sign Out', key='signOutButton', disabled=not(loggedin))],
         [sg.Button('Start Sync', key='startSync'), sg.Button('Stop Sync', key='stopSync', disabled=True), sg.Button('Force Sync', key='forceSync', disabled=True), sg.Text('Next Sync: N/A', key='nextSync')]
     ]
     
-    window = sg.Window('Carelink OBS Widget', windowLayout)
+    window = sg.Window('Carelink OBS Widget', windowLayout, icon=os.path.abspath('assets/icon.ico'))
     sg.theme('Python')
     while True:
         event, values = window.read()
@@ -142,7 +147,7 @@ def main():
             login_carelink()
             carelinkClient = connect_carelink()
             if carelinkClient.init():
-                carelinkData, lastSG, sgs = request_carelink_data(carelinkClient)
+                carelinkData, lastSG, sgs, lastTrend = request_carelink_data(carelinkClient)
                 loggedin = True
                 window['loginButton'].update(text='Logged In', disabled=True)
                 window['signOutButton'].update(disabled=False)
@@ -160,7 +165,8 @@ def main():
             settings['obs_credentials']['ip'] = values['obs_ip']
             settings['obs_credentials']['port'] = values['obs_port']
             settings['obs_credentials']['password'] = values['obs_password']
-            settings['obs_source_name'] = values['obs_source_name']
+            settings['obs_text_source_name'] = values['obs_text_source_name']
+            settings['obs_image_source_name'] = values['obs_image_source_name']
             save_settings(settings)
             sg.popup('Settings Saved!')
         
@@ -174,7 +180,7 @@ def main():
             sg.popup('You Have Now Logged Out. You Must Log In Again To Continue.')
         
         if event == 'startSync':
-            obsClient, available_requests = connect_obs()
+            obsClient = connect_obs()
             if loggedin and obsClient != None:
                 stop_event.clear()
                 force_sync_event.clear()
