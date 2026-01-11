@@ -16,13 +16,15 @@ def load_settings():
             return json.load(f)
     else:
         create_settings()
+        with open('settings.json', 'r') as f:
+            return json.load(f)
 
 def save_settings(settings):
     with open('settings.json', 'w+') as f:
         json.dump(settings, f, indent=4)
 
 def create_settings():
-    settings = {"obs_credentials": {"ip": "localhost", "port": "4455", "password": ""}, "use_mmol": True, "use_US_region": False, "obs_text_source_name": "Glucose", "obs_image_source_name": "Trend", "wait_time": 300}
+    settings = {"obs_credentials": {"ip": "localhost", "port": 4455, "password": ""}, "use_mmol": True, "use_US_region": False, "obs_text_source_name": "Glucose", "obs_image_source_name": "Trend", "wait_time": 300}
     with open('settings.json', 'w+') as f:
         json.dump(settings, f, indent=4)
 
@@ -32,7 +34,7 @@ def connect_obs(): # connects to obs websocket and returns the obsClient object 
     try:
         obsClient = obs.ReqClient(
             host=settings["obs_credentials"]["ip"],
-            port=int(settings["obs_credentials"]["port"]),
+            port=settings["obs_credentials"]["port"],
             password=settings["obs_credentials"]["password"]
         )
     except Exception as e:
